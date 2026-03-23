@@ -1,14 +1,17 @@
-import pandas as pd
 import json
 import os
 import re
 import time
-from openai import OpenAI
 from datetime import datetime
+import google.generativeai as genai
+from dotenv import load_dotenv
 
-# Inicjalizacja klienta OpenAI
-# Upewnij się, że masz ustawioną zmienną środowiskową OPENAI_API_KEY
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Załaduj zmienne środowiskowe z pliku .env
+load_dotenv()
+
+# Konfiguracja klienta Gemini
+# Upewnij się, że masz ustawioną zmienną środowiskową GEMINI_API_KEY w swoim portfelu .env
+genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def extract_data_with_llm(message, retries=3):
     """
@@ -17,7 +20,6 @@ def extract_data_with_llm(message, retries=3):
     """
     prompt = f"""
     Przeanalizuj poniższą wiadomość od klienta i zwróć DOKŁADNIE i TYLKO obiekt JSON.
-    Nie dodawaj żadnego tekstu przed ani po obiekcie JSON.
     Format JSON:
     {{
         "powod_zwrotu": "Uszkodzenie" | "Zły Rozmiar" | "Opóźnienie w Dostawie" | "Inne",
@@ -27,24 +29,22 @@ def extract_data_with_llm(message, retries=3):
     Wiadomość klienta: "{message}"
     """
     
+    # Inicjalizacja modelu Gemini Pro (wersja 1.5)
+    model = genai.GenerativeModel('gemini-1.5-pro')
+    
     for attempt in range(retries):
         try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.0 # Zerowa temperatura = maksymalna przewidywalność odpowiedzi
+            # Wymuszamy format JSON - super moc Gemini!
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.0,
+                    response_mime_type="application/json"
+                )
             )
-            content = response.choices[0].message.content.strip()
             
-            # CZYSZCZENIE JSONA (zabezpieczenie przed formatowaniem markdown)
-            if content.startswith("```json"):
-                content = content[7:]
-            elif content.startswith("```"):
-                content = content[3:]
-            if content.endswith("```"):
-                content = content[:-3]
-                
-            return json.loads(content.strip())
+            content = response.text.strip()
+            return json.loads(content)
             
         except json.JSONDecodeError:
             print(f"  [!] Próba {attempt+1}: Model nie zwrócił poprawnego JSONa. Próbuję ponownie...")
@@ -74,32 +74,32 @@ def generate_response_email(status, reason, rating, retries=2):
     Jeśli status to STANDARD_RETURN_PROCEDURE: Poinformuj, że zgłoszenie zostało przyjęte i oczekuje na standardowe rozpatrzenie w centrum logistycznym.
     """
     
+    model = genai.GenerativeModel('gemini-1.5-pro')
+    
     for attempt in range(retries):
         try:
-            response = client.chat.completions.create(
-                model="gpt-3.5-turbo",
-                messages=[{"role": "user", "content": prompt}],
-                temperature=0.7 # Wyższa temperatura = bardziej naturalny, "ludzki" tekst
+            response = model.generate_content(
+                prompt,
+                generation_config=genai.GenerationConfig(
+                    temperature=0.7
+                )
             )
-            return response.choices[0].message.content.strip()
+            return response.text.strip()
         except Exception as e:
             time.sleep(2)
             
     return "Dzień dobry. Twoje zgłoszenie zostało przyjęte do realizacji. Skontaktujemy się z Tobą wkrótce. Pozdrawiamy, Zespół TrendVibe."
 
-def main():
-    print("Rozpoczynam pracę systemu Sprytne Zwroty AI...")
+from dotenv import load_dotenv
 
-    # 1. Wczytanie danych z plików CSV
-    try:
-        zgloszenia = pd.read_csv("zgloszenia_BOK.csv")
-        klienci = pd.read_csv("klienci_historia.csv")
-        # Zabezpieczenie przed polskimi znakami w nazwie pliku
-        plik_produkty = "katalog_produktow.csv" if os.path.exists("katalog_produktow.csv") else "katalog_produktów.csv"
-        produkty = pd.read_csv(plik_produkty)
-    except FileNotFoundError as e:
-        print(f"Błąd: Nie znaleziono pliku. Upewnij się, że wypakowałez pliki CSV do tego samego folderu. Szczegóły: {e}")
-        return
+# Załaduj zmienne środowiskowe z pliku .env
+load_dotenv()
+
+# Inicjalizacja klienta OpenAI
+# Upewnij się, że masz ustawioną zmienną środowiskową OPENAI_API_KEY
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+
+def extract_data_with_llm(message, retries=3):
 
     # Przygotowanie dat
     zgloszenia['CREATED_AT'] = pd.to_datetime(zgloszenia['CREATED_AT'])
