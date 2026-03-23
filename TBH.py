@@ -1,3 +1,4 @@
+import pandas as pd
 import json
 import os
 import re
@@ -10,13 +11,13 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # Konfiguracja klienta Gemini
-# Upewnij się, że masz ustawioną zmienną środowiskową GEMINI_API_KEY w swoim portfelu .env
+# Upewnij się, że masz ustawioną zmienną środowiskową GEMINI_API_KEY w swoim pliku .env
 genai.configure(api_key=os.getenv("GEMINI_API_KEY"))
 
 def extract_data_with_llm(message, retries=3):
     """
     Wysyła wiadomość klienta do modelu LLM w celu ekstrakcji danych.
-    Zawiera mechanizm ponawiania (retry) w razie błędów połączenia lub limitów API.
+    Dzięki Gemini natywnie wymuszamy idealny format JSON.
     """
     prompt = f"""
     Przeanalizuj poniższą wiadomość od klienta i zwróć DOKŁADNIE i TYLKO obiekt JSON.
@@ -29,12 +30,12 @@ def extract_data_with_llm(message, retries=3):
     Wiadomość klienta: "{message}"
     """
     
-    # Inicjalizacja modelu Gemini Pro (wersja 1.5)
+    # Inicjalizacja modelu Gemini Pro
     model = genai.GenerativeModel('gemini-1.5-pro')
     
     for attempt in range(retries):
         try:
-            # Wymuszamy format JSON - super moc Gemini!
+            # Wymuszamy format JSON - wbudowana funkcja Gemini
             response = model.generate_content(
                 prompt,
                 generation_config=genai.GenerationConfig(
@@ -90,16 +91,19 @@ def generate_response_email(status, reason, rating, retries=2):
             
     return "Dzień dobry. Twoje zgłoszenie zostało przyjęte do realizacji. Skontaktujemy się z Tobą wkrótce. Pozdrawiamy, Zespół TrendVibe."
 
-from dotenv import load_dotenv
+def main():
+    print("Rozpoczynam pracę systemu Sprytne Zwroty AI...")
 
-# Załaduj zmienne środowiskowe z pliku .env
-load_dotenv()
-
-# Inicjalizacja klienta OpenAI
-# Upewnij się, że masz ustawioną zmienną środowiskową OPENAI_API_KEY
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-def extract_data_with_llm(message, retries=3):
+    # 1. Wczytanie danych z plików CSV
+    try:
+        zgloszenia = pd.read_csv("zgloszenia_BOK.csv")
+        klienci = pd.read_csv("klienci_historia.csv")
+        # Zabezpieczenie przed polskimi znakami w nazwie pliku
+        plik_produkty = "katalog_produktow.csv" if os.path.exists("katalog_produktow.csv") else "katalog_produktów.csv"
+        produkty = pd.read_csv(plik_produkty)
+    except FileNotFoundError as e:
+        print(f"Błąd: Nie znaleziono pliku. Upewnij się, że wypakowałes pliki CSV do tego samego folderu co skrypt. Szczegóły: {e}")
+        return
 
     # Przygotowanie dat
     zgloszenia['CREATED_AT'] = pd.to_datetime(zgloszenia['CREATED_AT'])
@@ -127,14 +131,14 @@ def extract_data_with_llm(message, retries=3):
         ocena = llm_data.get('ocena', 3)
         zadanie = llm_data.get('zadanie', 'Brak Sprecyzowania')
         
-        # Logika Biznesowa (Python jest tu ekstremalnie szybki)
+        # Logika Biznesowa
         status = None
         message_str = str(row['CUSTOMER_MESSAGE'])
         kategoria = str(row['CATEGORY'])
         
         is_vip = (row['TOTAL_SPENT'] > 2500) and (row['RETURN_RATE'] < 0.3)
         
-        # Reguła 1: Prawna (używamy bezpiecznego Regexa)
+        # Reguła 1: Prawna
         if legal_pattern.search(message_str):
             status = 'ESCALATE_LEGAL'
             
@@ -156,7 +160,6 @@ def extract_data_with_llm(message, retries=3):
 
         # Generowanie akcji i przydział do odpowiedniego pliku
         if status in ['AUTO_REFUND', 'DISCOUNT_15', 'STANDARD_RETURN_PROCEDURE']:
-            # Pytamy LLM o maila tylko wtedy, gdy jest to potrzebne
             odpowiedz = generate_response_email(status, powod, ocena)
             raport_automatyczny.append({
                 'TICKET_ID': row['TICKET_ID'],
@@ -171,14 +174,13 @@ def extract_data_with_llm(message, retries=3):
                 'DATA_ROZPATRZENIA': datetime.now().strftime("%Y-%m-%d %H:%M:%S")
             })
         else:
-            # Zachowujemy wszystkie potrzebne kolumny, w tym CREATED_AT
             do_recznej_weryfikacji.append({
                 'TICKET_ID': row['TICKET_ID'],
                 'CUSTOMER_ID': row['CUSTOMER_ID'],
                 'ORDER_ID': row['ORDER_ID'],
                 'PRODUCT_ID': row['PRODUCT_ID'],
                 'CUSTOMER_MESSAGE': row['CUSTOMER_MESSAGE'],
-                'CREATED_AT': row['CREATED_AT'], # Zachowujemy!
+                'CREATED_AT': row['CREATED_AT'], 
                 'POWOD_ZWROTU': powod,
                 'OCENA': ocena,
                 'STATUS': status,
@@ -186,7 +188,6 @@ def extract_data_with_llm(message, retries=3):
             })
 
     # 3. Sortowanie i Zapis
-    
     if raport_automatyczny:
         df_auto = pd.DataFrame(raport_automatyczny)
         df_auto['DATA_ROZPATRZENIA'] = pd.to_datetime(df_auto['DATA_ROZPATRZENIA'])
@@ -208,7 +209,7 @@ def extract_data_with_llm(message, retries=3):
             ascending=[False, False, True]
         )
         
-        # Usuwamy tylko kolumny pomocnicze użyte do sortowania, zostawiając oryginalne dane
+        # Usuwamy kolumny pomocnicze użyte do sortowania
         df_manual = df_manual.drop(columns=['DNI_OCZEKIWANIA', 'ZAGROZONE_30_DNI', 'CZY_LEGAL'])
         
         df_manual.to_csv("do_weryfikacji_recznej.csv", index=False, encoding='utf-8')
