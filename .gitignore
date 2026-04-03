@@ -1,0 +1,12 @@
+.env
+
+venv/
+.venv/
+
+.idea/
+
+__pycache__/
+*.py[cod]
+
+raport_automatyczny.csv
+do_weryfikacji_recznej.csv
