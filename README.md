@@ -25,14 +25,14 @@ cp .env.example .env
 
 ## ⚙️ Jak to działa? (Logika biznesowa)
 System przyjmuje zgłoszenie reklamacyjne, a następnie:
-* **Analizuje treść** (np. za pomocą API do analizy tekstu).
-* **Kategoryzuje** problem (zwrot/uszkodzenie/pomyłka).
-* **Generuje decyzję** (np. automatyczna etykieta zwrotna lub przekazanie do konsultanta).
+* **Analizuje treść** za pomocą API.
+* **Kategoryzuje** problem (zwrot/uszkodzenie/opóźnienie).
+* **Generuje decyzję** automatyczna wiadomość zwrotna lub przekazanie do ręcznej weryfikacji.
 
 ## 🛠 Technologie
 * **Python 3.12** – Serce systemu.
-* **[Nazwa API]** – Wykorzystane do [np. analizy sentymentu/generowania odpowiedzi].
+* **Gemini 3 Flash Preview** – Odpowiada za sortowanie reklamacji, priorytetyzację zgłoszeń oraz automatyzację komunikacji z klientem.
 
 ## 👥 Skład zespołu
 * **Tomasz Rowiński** – Backend & Logic
-* **Borys Szycher** – API Integration & Data Flow
+* **Borys Szycher** – API Integration
